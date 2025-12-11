@@ -44,8 +44,8 @@
     template: redhat-datasciencecluster.yaml.j2
   register: r_ds_cluster
   until: not r_ds_cluster.failed
-  retries: 10
-  delay: 30
+  retries: "{{ ocp4_workload_openshift_ai_dsc_create_retries }}"
+  delay: "{{ ocp4_workload_openshift_ai_dsc_create_delay }}"
 
 - name: Check if Data Science Cluster is ready
   kubernetes.core.k8s_info:
@@ -59,8 +59,8 @@
   - r_ds_cluster.resources[0].status is defined
   - r_ds_cluster.resources[0].status.phase is defined
   - r_ds_cluster.resources[0].status.phase == 'Ready'
-  retries: 30
-  delay: 10
+  retries: "{{ ocp4_workload_openshift_ai_dsc_ready_retries }}"
+  delay: "{{ ocp4_workload_openshift_ai_dsc_ready_delay }}"
 
 - name: Create OpenShift AI Dashboard Route
   when: _ocp4_workload_openshift_ai_version_3 | bool
@@ -80,8 +80,8 @@
   - r_odh_dashboard_route.resources | length > 0
   - r_odh_dashboard_route.resources.0.status.ingress.0.host is defined
   - r_odh_dashboard_route.resources.0.status.ingress.0.host | length > 0
-  retries: 30
-  delay: 10
+  retries: "{{ ocp4_workload_openshift_ai_dashboard_route_retries }}"
+  delay: "{{ ocp4_workload_openshift_ai_dashboard_route_delay }}"
 
 - name: Report OpenShift AI Dashboard URL
   agnosticd.core.agnosticd_user_info:

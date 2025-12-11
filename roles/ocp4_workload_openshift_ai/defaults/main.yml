@@ -60,3 +60,25 @@ ocp4_workload_openshift_ai_catalog_snapshot_image: quay.io/gpte-devops-automatio
 
 # Catalog snapshot image tag
 ocp4_workload_openshift_ai_catalog_snapshot_image_tag: v4.19_2025_07_21
+
+# --------------------------------
+# Wait and Retry Configuration
+# --------------------------------
+
+# Data Science Cluster creation wait configuration
+# Number of times to retry creating DataScienceCluster if it fails
+ocp4_workload_openshift_ai_dsc_create_retries: 10
+# Seconds to wait between retry attempts
+ocp4_workload_openshift_ai_dsc_create_delay: 30
+
+# Data Science Cluster readiness wait configuration
+# Number of times to check if DataScienceCluster has reached Ready phase
+ocp4_workload_openshift_ai_dsc_ready_retries: 30
+# Seconds to wait between each retry attempt
+ocp4_workload_openshift_ai_dsc_ready_delay: 10
+
+# Dashboard route readiness wait configuration
+# Number of times to check if dashboard route is available
+ocp4_workload_openshift_ai_dashboard_route_retries: 30
+# Seconds to wait between each retry attempt
+ocp4_workload_openshift_ai_dashboard_route_delay: 10
