@@ -12,12 +12,12 @@
   block:
     - name: Get Token for Master App
       ansible.builtin.uri:
-        url: "https://login.microsoftonline.com/{{ ocp5_workload_ols_azure_tenant_id }}/oauth2/v2.0/token"
+        url: "https://login.microsoftonline.com/{{ ocp5_workload_ols_azure_sp_tenant_id }}/oauth2/v2.0/token"
         method: POST
         headers:
           Content-Type: "application/x-www-form-urlencoded"
         # yamllint disable rule:line-length
-        body: "grant_type=client_credentials&client_id={{ ocp5_workload_ols_main_client_id }}&client_secret={{ ocp5_workload_ols_main_client_secret }}&scope=https://graph.microsoft.com/.default"
+        body: "grant_type=client_credentials&client_id={{ ocp5_workload_ols_azure_sp_client_id }}&client_secret={{ ocp5_workload_ols_azure_sp_client_secret }}&scope=https://graph.microsoft.com/.default"
         # yamllint enable rule:line-length
         body_format: form-urlencoded
         return_content: true
@@ -34,7 +34,7 @@
     - name: Find Child App by Display Name
       ansible.builtin.uri:
         # yamllint disable rule:line-length
-        url: "https://graph.microsoft.com/v1.0/applications?$filter=startswith(displayName,'{{ ocp5_workload_ols_child_app_display_name }}-{{ guid }}')"
+        url: "https://graph.microsoft.com/v1.0/applications?$filter=startswith(displayName,'{{ ocp5_workload_ols_azure_sp_child_app_name }}-{{ guid }}')"
         # yamllint enable rule:line-length
         method: GET
         headers:
@@ -63,7 +63,7 @@
       when: app_search.json.value | length > 0
       ansible.builtin.uri:
         # yamllint disable rule:line-length
-        url: "https://graph.microsoft.com/v1.0/applications?$filter=startswith(displayName,'{{ ocp5_workload_ols_child_app_display_name }}-{{ guid }}')"
+        url: "https://graph.microsoft.com/v1.0/applications?$filter=startswith(displayName,'{{ ocp5_workload_ols_azure_sp_child_app_name }}-{{ guid }}')"
         # yamllint enable rule:line-length
         method: GET
         headers:

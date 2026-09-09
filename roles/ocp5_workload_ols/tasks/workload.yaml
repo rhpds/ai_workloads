@@ -20,15 +20,15 @@
   when: ocp5_workload_ols_provider == 'azure_sp'
   ansible.builtin.assert:
     that:
-      - ocp5_workload_ols_azure_tenant_id is defined
-      - ocp5_workload_ols_azure_tenant_id != "changeme"
-      - ocp5_workload_ols_main_client_id is defined
-      - ocp5_workload_ols_main_client_id != "changeme"
-      - ocp5_workload_ols_main_client_secret is defined
-      - ocp5_workload_ols_main_client_secret != "changeme"
-      - ocp5_workload_ols_azure_group_id is defined
-      - ocp5_workload_ols_azure_group_id != "changeme"
-      - ocp5_workload_ols_child_app_display_name is defined
+      - ocp5_workload_ols_azure_sp_tenant_id is defined
+      - ocp5_workload_ols_azure_sp_tenant_id != "changeme"
+      - ocp5_workload_ols_azure_sp_client_id is defined
+      - ocp5_workload_ols_azure_sp_client_id != "changeme"
+      - ocp5_workload_ols_azure_sp_client_secret is defined
+      - ocp5_workload_ols_azure_sp_client_secret != "changeme"
+      - ocp5_workload_ols_azure_sp_group_id is defined
+      - ocp5_workload_ols_azure_sp_group_id != "changeme"
+      - ocp5_workload_ols_azure_sp_child_app_name is defined
       - guid is defined
     fail_msg: >-
       Azure SP is selected but required Azure AD variables are not configured.

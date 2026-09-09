@@ -64,32 +64,36 @@ ocp5_workload_ols_loglevel: DEBUG
 ocp5_workload_ols_maas_api_token: "changeme"
 ocp5_workload_ols_maas_url: "https://maas-rhdp.apps.maas.redhatworkshops.io/v1"
 ocp5_workload_ols_maas_model: claude-sonnet-4-6
-ocp5_workload_ols_maas_deploymentname: claude-sonnet-4-6
+ocp5_workload_ols_maas_deployment_name: claude-sonnet-4-6
 
 # --------------------------------
-# Azure OpenAI (provider: azure_sp or azure_token)
+# Azure OpenAI resource (shared by azure_sp and azure_token)
 # --------------------------------
 ocp5_workload_ols_azure_url: "https://llm-gpt4-lightspeed.cognitiveservices.azure.com/"
 ocp5_workload_ols_azure_model: gpt-4
-ocp5_workload_ols_azure_deploymentname: gpt-4
-# Used only during verification of the Azure SP token
+ocp5_workload_ols_azure_deployment_name: gpt-4
+# Used only when verifying the azure_sp child-app token
 ocp5_workload_ols_azure_api_version: 2025-01-01-preview
 # Use max_completion_tokens instead of max_tokens (required for gpt-5)
-ocp5_workload_ols_use_max_completion_tokens: false
-ocp5_workload_ols_max_completion_tokens: 1000
+ocp5_workload_ols_azure_use_max_completion_tokens: false
+ocp5_workload_ols_azure_max_completion_tokens: 1000
 
-# azure_token: shared/hardcoded Azure OpenAI API key for testing.
-# Not created per GUID; this role does not clean it up.
+# --------------------------------
+# azure_token credential
+# --------------------------------
+# Shared/hardcoded Azure OpenAI API key. Not created per GUID; this role
+# does not clean it up.
 ocp5_workload_ols_azure_api_token: "changeme"
 
-# azure_sp: Azure AD credentials used to create a per-GUID child app.
-# IMPORTANT: These must be set to actual values before deployment.
+# --------------------------------
+# azure_sp identity (parent SP that mints a per-GUID child app)
+# --------------------------------
 # Destroy deletes the child app registration.
-ocp5_workload_ols_main_client_id: "changeme"
-ocp5_workload_ols_main_client_secret: "changeme"
-ocp5_workload_ols_azure_tenant_id: "changeme"
-ocp5_workload_ols_azure_group_id: "changeme"
-ocp5_workload_ols_child_app_display_name: "RHDP-lightspeed"
+ocp5_workload_ols_azure_sp_tenant_id: "changeme"
+ocp5_workload_ols_azure_sp_client_id: "changeme"
+ocp5_workload_ols_azure_sp_client_secret: "changeme"
+ocp5_workload_ols_azure_sp_group_id: "changeme"
+ocp5_workload_ols_azure_sp_child_app_name: "RHDP-lightspeed"
 
 # --------------------------------
 # OpenAI (provider: openai)
