@@ -152,7 +152,7 @@
 - name: Verify Token Works with AI Service
   ansible.builtin.uri:
     # yamllint disable rule:line-length
-    url: "{{ ocp5_workload_ols_llm_providers_url }}openai/deployments/{{ ocp5_workload_ols_llm_deploymentname }}/chat/completions?api-version={{ ocp5_workload_ols_azure_api_version }}"
+    url: "{{ ocp5_workload_ols_azure_url }}openai/deployments/{{ ocp5_workload_ols_azure_deploymentname }}/chat/completions?api-version={{ ocp5_workload_ols_azure_api_version }}"
     # yamllint enable rule:line-length
     method: POST
     headers:

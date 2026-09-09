@@ -43,32 +43,48 @@ ocp5_workload_ols_catalog_snapshot_image: quay.io/openshift-lightspeed/lightspee
 ocp5_workload_ols_catalog_snapshot_image_tag: "stable-v0.1.0"
 
 # --------------------------------
-# OLS Configuration
+# Classic OLS provider
 # --------------------------------
-
-# AI Platform to use: azure, openai, watson, openshiftai
-ocp5_workload_ols_ai_platform: azure
+# Which classic OLSConfig + credential secret to create.
+#   maas         — Red Hat MaaS (rhoai_vllm). Default. Cheapest for RHDP.
+#   azure_sp     — Azure OpenAI via a per-GUID child app + service principal
+#   azure_token  — Azure OpenAI via a shared/hardcoded API key (testing)
+#   openai       — Direct OpenAI API
+# Agentic OLS is independent of this setting.
+ocp5_workload_ols_provider: maas
 
 ocp5_workload_ols_introspection_enabled: true
+ocp5_workload_ols_loglevel: DEBUG
 
 # --------------------------------
-# Authentication Configuration
+# MaaS (provider: maas)
 # --------------------------------
-# Azure Bearer Token Authentication (when ocp5_workload_ols_get_token is true)
-# Setting this to true will provision a unique Child App & SP in Azure
-# Always set this to true for production workloads so that the secret is unique
-# to the provision.
-# Set to false to use API key authentication instead for development purposes
-ocp5_workload_ols_get_token: true
+# Catalogs that mint a MaaS key should set this. Destroy of that key is
+# catalog-owned; this role does not clean it up.
+ocp5_workload_ols_maas_api_token: "changeme"
+ocp5_workload_ols_maas_url: "https://maas-rhdp.apps.maas.redhatworkshops.io/v1"
+ocp5_workload_ols_maas_model: claude-sonnet-4-6
+ocp5_workload_ols_maas_deploymentname: claude-sonnet-4-6
 
-# API Key Authentication (when ocp5_workload_ols_get_token is false)
-# IMPORTANT: This must be set to your actual API key before deployment
-# DO NOT commit real credentials to version control
-ocp5_workload_ols_api_token: "changeme"
+# --------------------------------
+# Azure OpenAI (provider: azure_sp or azure_token)
+# --------------------------------
+ocp5_workload_ols_azure_url: "https://llm-gpt4-lightspeed.cognitiveservices.azure.com/"
+ocp5_workload_ols_azure_model: gpt-4
+ocp5_workload_ols_azure_deploymentname: gpt-4
+# Used only during verification of the Azure SP token
+ocp5_workload_ols_azure_api_version: 2025-01-01-preview
+# Use max_completion_tokens instead of max_tokens (required for gpt-5)
+ocp5_workload_ols_use_max_completion_tokens: false
+ocp5_workload_ols_max_completion_tokens: 1000
 
-# Azure AD credentials for token-based authentication
-# IMPORTANT: These must be set to actual values before deployment
-# DO NOT commit real credentials to version control
+# azure_token: shared/hardcoded Azure OpenAI API key for testing.
+# Not created per GUID; this role does not clean it up.
+ocp5_workload_ols_azure_api_token: "changeme"
+
+# azure_sp: Azure AD credentials used to create a per-GUID child app.
+# IMPORTANT: These must be set to actual values before deployment.
+# Destroy deletes the child app registration.
 ocp5_workload_ols_main_client_id: "changeme"
 ocp5_workload_ols_main_client_secret: "changeme"
 ocp5_workload_ols_azure_tenant_id: "changeme"
@@ -76,28 +92,14 @@ ocp5_workload_ols_azure_group_id: "changeme"
 ocp5_workload_ols_child_app_display_name: "RHDP-lightspeed"
 
 # --------------------------------
-# LLM Provider Configuration
+# OpenAI (provider: openai)
 # --------------------------------
-
-# Azure OpenAI configuration
-ocp5_workload_ols_llm_providers_models_name: gpt-4
-ocp5_workload_ols_llm_providers_provide_name: Azure
-ocp5_workload_ols_llm_providers_provide_type: azure_openai
-ocp5_workload_ols_llm_providers_url: 'https://llm-gpt4-lightspeed.cognitiveservices.azure.com/'
-ocp5_workload_ols_llm_deploymentname: gpt-4
-# this is only used during verification of Azure SP token
-ocp5_workload_ols_azure_api_version: 2025-01-01-preview
-# Use max_completion_tokens instead of max_tokens (required for gpt-5)
-ocp5_workload_ols_use_max_completion_tokens: false
-ocp5_workload_ols_max_completion_tokens: 1000
-
-# Watson AI configuration (only used when ocp5_workload_ols_ai_platform is watson)
-ocp5_workload_ols_watson_projectid: projectid
-
-# OLS runtime configuration
-ocp5_workload_ols_defaultmodel: gpt-4
-ocp5_workload_ols_defaultprovider: Azure
-ocp5_workload_ols_loglevel: DEBUG
+# User- or catalog-provided key. This role does not clean it up.
+# Independent from ocp5_workload_ols_agentic_api_key. Catalogs that want
+# the same token for both can alias them in AgnosticV.
+ocp5_workload_ols_openai_api_key: "changeme"
+ocp5_workload_ols_openai_url: "https://api.openai.com/v1"
+ocp5_workload_ols_openai_model: gpt-4o
 
 # --------------------------------
 # User Access Configuration
@@ -152,9 +154,10 @@ ocp5_workload_ols_debug: false
 # Set to true to deploy the agentic OLS component on top of classic OLS
 ocp5_workload_ols_enable_agentic: false
 
-# User-provided OpenAI API key for the agentic component.
-# INDEPENDENT from the Azure credentials used by classic OLS.
-# IMPORTANT: Must be set to a real key when ocp5_workload_ols_enable_agentic is true.
+# API key for the agentic component. Required when agentic is enabled.
+# Independent of classic OLS provider credentials. Catalogs that want
+# the same token as classic OpenAI can alias this to
+# ocp5_workload_ols_openai_api_key in AgnosticV.
 ocp5_workload_ols_agentic_api_key: "changeme"
 
 # LLM model used by the agentic component

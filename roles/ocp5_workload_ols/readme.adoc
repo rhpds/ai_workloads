@@ -4,54 +4,65 @@
 
 * This role installs the OpenShift Lightspeed Operator into an OpenShift cluster.
 
-* You need to have an API token or credentials to the LLM model you want OLS to connect to.
+* Classic OLS is configured from `ocp5_workload_ols_provider` (`maas`, `azure_sp`, `azure_token`, or `openai`). Default is MaaS.
 
 It consists of the following task files:
-
-** Tasks: pre_workload.yaml - Validates variables and environment prerequisites.
-*** Debug task will print out: `Pre-Workload tasks completed successfully.`
 
 ** Tasks: workload.yaml - Deploys and configures OpenShift Lightspeed.
 *** This playbook creates the following OpenShift resources:
 **** Namespace (openshift-lightspeed)
 **** Operator subscription (if ocp5_workload_ols_install_operator is true)
-**** Authentication secrets (token or API key based)
-**** OLSConfig to connect to an LLM model
+**** One credential secret and OLSConfig for the selected provider
+**** ClusterRoleBindings for lightspeed-operator-query-access
 
 ** Tasks: install_ols_operator.yaml - Deploys the OLS operator from OperatorHub or catalog snapshot.
-*** Creates namespace, catalog source (if using snapshots), and operator subscription.
 
-** Tasks: setup_azure_token.yaml - Manages Azure AD token-based authentication (when ocp5_workload_ols_get_token is true).
+** Tasks: setup_azure_token.yaml - Creates an Azure AD child app and service principal (when provider is azure_sp).
 *** Creates Azure AD app registration and service principal
 *** Adds service principal to Azure AD group for RBAC inheritance
 *** Validates token works with Azure OpenAI service
 *** Waits for RBAC propagation (30s + retry logic)
 
-** Tasks: post_workload.yaml - Used to configure the workload after deployment.
-*** This role doesn't do anything here.
-*** Debug task will print out: `Workload Tasks completed successfully.`
-
-** Tasks: remove_workload.yaml - Used to delete external resources.
-*** This role removes Azure App Registrations and Service Principals (if token-based auth was used).
-*** Note: OpenShift cluster resources are not removed as the cluster will be destroyed.
-*** Debug task will print out: `Workload removal completed successfully.`
+** Tasks: remove_workload.yaml - Deletes external resources that survive cluster deletion.
+*** Only the Azure child app registration (provider azure_sp).
+*** MaaS, Azure token, and OpenAI keys are not created by this role and are not deleted here.
 
 ** Tasks: deploy_agentic_ols.yaml - Deploys the agentic OLS component (when ocp5_workload_ols_enable_agentic is true).
-*** Pre-flight: scales classic OLS operator to 0 replicas, removes stale ownerReferences from shared ConfigMap.
-*** Shallow-clones lightspeed-agentic-operator and runs quickstart scripts in order:
-**** deploy-otel.sh
-**** deploy-configmap.sh
-**** deploy-operator.sh
-**** deploy-alerts-adapter.sh (when ocp5_workload_ols_agentic_enable_alerts_adapter is true)
-**** deploy-console.sh (when ocp5_workload_ols_agentic_enable_console is true)
-*** Creates llm-creds-openai Secret from ocp5_workload_ols_agentic_api_key (user-provided OpenAI key, fully independent of classic OLS Azure credentials).
-*** Applies LLMProvider and Agent CRs (agentic.openshift.io/v1alpha1) using direct OpenAI API.
+*** Independent of the classic OLS provider.
+*** Requires ocp5_workload_ols_agentic_api_key. Catalogs that want the same token as classic OpenAI can alias that variable in AgnosticV.
+
+== Classic OLS providers
+
+[cols="1,2,2,2"]
+|===
+| Provider | Secret | OLSConfig | Destroy cleanup
+
+| maas
+| rhoai-api-keys (apitoken)
+| install_maas_olsconfig.yaml.j2
+| none (catalog-owned key)
+
+| azure_sp
+| azure-api-keys (client_id/secret/tenant_id)
+| install_azure_sp_olsconfig.yaml.j2
+| deletes child Azure app
+
+| azure_token
+| credentials (apitoken)
+| install_azure_token_olsconfig.yaml.j2
+| none
+
+| openai
+| openai-api-keys (apitoken)
+| install_openai_olsconfig.yaml.j2
+| none
+|===
+
 
 == Agentic OLS Configuration
 
 * Set ocp5_workload_ols_enable_agentic: true to deploy the agentic component on top of classic OLS.
-* Provide ocp5_workload_ols_agentic_api_key with a real OpenAI API key.
-  This is completely independent of the Azure credentials used by classic OLS.
+* Provide ocp5_workload_ols_agentic_api_key. This is independent of classic OLS credentials.
 * The classic OLS operator is scaled to 0 after classic OLS is fully ready, and remains at 0 for the lifetime of the environment.
 * Agentic OLS is not uninstalled on destroy — the cluster itself is deleted.
 
