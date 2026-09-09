@@ -4,12 +4,12 @@
 
 - name: Get Token for Master App
   ansible.builtin.uri:
-    url: "https://login.microsoftonline.com/{{ ocp5_workload_ols_azure_tenant_id }}/oauth2/v2.0/token"
+    url: "https://login.microsoftonline.com/{{ ocp5_workload_ols_azure_sp_tenant_id }}/oauth2/v2.0/token"
     method: POST
     headers:
       Content-Type: "application/x-www-form-urlencoded"
     # yamllint disable rule:line-length
-    body: "grant_type=client_credentials&client_id={{ ocp5_workload_ols_main_client_id }}&client_secret={{ ocp5_workload_ols_main_client_secret }}&scope=https://graph.microsoft.com/.default"
+    body: "grant_type=client_credentials&client_id={{ ocp5_workload_ols_azure_sp_client_id }}&client_secret={{ ocp5_workload_ols_azure_sp_client_secret }}&scope=https://graph.microsoft.com/.default"
     # yamllint enable rule:line-length
     return_content: true
     status_code: 200
@@ -30,7 +30,7 @@
       Authorization: "Bearer {{ master_access_token }}"
       Content-Type: "application/json"
     body:
-      displayName: "{{ ocp5_workload_ols_child_app_display_name }}-{{ guid }}"
+      displayName: "{{ ocp5_workload_ols_azure_sp_child_app_name }}-{{ guid }}"
       passwordCredentials:
         - displayName: "ChildAppRegistrationSecret"
     body_format: json
@@ -93,7 +93,7 @@
 
 - name: Add Child App to Azure AD Group
   ansible.builtin.uri:
-    url: "https://graph.microsoft.com/v1.0/groups/{{ ocp5_workload_ols_azure_group_id }}/members/$ref"
+    url: "https://graph.microsoft.com/v1.0/groups/{{ ocp5_workload_ols_azure_sp_group_id }}/members/$ref"
     method: POST
     headers:
       Authorization: "Bearer {{ master_access_token }}"
@@ -118,7 +118,7 @@
   register: membership_check
   until:
     - membership_check.status == 200
-    - membership_check.json.value | default([]) | selectattr('id', 'equalto', ocp5_workload_ols_azure_group_id) | list | length > 0
+    - membership_check.json.value | default([]) | selectattr('id', 'equalto', ocp5_workload_ols_azure_sp_group_id) | list | length > 0
   retries: 12
   delay: 5
   failed_when: false  # Don't fail if group membership isn't found immediately
@@ -130,7 +130,7 @@
 
 - name: Get Token for Child App
   ansible.builtin.uri:
-    url: "https://login.microsoftonline.com/{{ ocp5_workload_ols_azure_tenant_id }}/oauth2/v2.0/token"
+    url: "https://login.microsoftonline.com/{{ ocp5_workload_ols_azure_sp_tenant_id }}/oauth2/v2.0/token"
     method: POST
     headers:
       Content-Type: "application/x-www-form-urlencoded"
@@ -152,7 +152,7 @@
 - name: Verify Token Works with AI Service
   ansible.builtin.uri:
     # yamllint disable rule:line-length
-    url: "{{ ocp5_workload_ols_llm_providers_url }}openai/deployments/{{ ocp5_workload_ols_llm_deploymentname }}/chat/completions?api-version={{ ocp5_workload_ols_azure_api_version }}"
+    url: "{{ ocp5_workload_ols_azure_url }}openai/deployments/{{ ocp5_workload_ols_azure_deployment_name }}/chat/completions?api-version={{ ocp5_workload_ols_azure_api_version }}"
     # yamllint enable rule:line-length
     method: POST
     headers:
@@ -166,8 +166,8 @@
             {"role": "user", "content": "What is the largest city in India?"}
           ]
         } | combine(
-          {"max_completion_tokens": ocp5_workload_ols_max_completion_tokens | int}
-          if ocp5_workload_ols_use_max_completion_tokens | bool
+          {"max_completion_tokens": ocp5_workload_ols_azure_max_completion_tokens | int}
+          if ocp5_workload_ols_azure_use_max_completion_tokens | bool
           else {"max_tokens": 100}
         )
       }}
