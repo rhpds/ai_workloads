@@ -156,6 +156,38 @@
     NAMESPACE: "{{ ocp5_workload_ols_namespace }}"
   changed_when: true
 
+- name: Grant alerts adapter ClusterRole for AgenticOLSConfig
+  when: ocp5_workload_ols_agentic_enable_alerts_adapter | bool
+  kubernetes.core.k8s:
+    state: present
+    definition:
+      apiVersion: rbac.authorization.k8s.io/v1
+      kind: ClusterRole
+      metadata:
+        name: lightspeed-agentic-alerts-adapter-agenticolsconfig
+      rules:
+        - apiGroups: ["agentic.openshift.io"]
+          resources: ["agenticolsconfigs"]
+          verbs: ["get"]
+
+- name: Bind alerts adapter ClusterRole for AgenticOLSConfig
+  when: ocp5_workload_ols_agentic_enable_alerts_adapter | bool
+  kubernetes.core.k8s:
+    state: present
+    definition:
+      apiVersion: rbac.authorization.k8s.io/v1
+      kind: ClusterRoleBinding
+      metadata:
+        name: lightspeed-agentic-alerts-adapter-agenticolsconfig
+      roleRef:
+        apiGroup: rbac.authorization.k8s.io
+        kind: ClusterRole
+        name: lightspeed-agentic-alerts-adapter-agenticolsconfig
+      subjects:
+        - kind: ServiceAccount
+          name: lightspeed-agentic-alerts-adapter
+          namespace: "{{ ocp5_workload_ols_namespace }}"
+
 - name: Deploy console plugin
   when: ocp5_workload_ols_agentic_enable_console | bool
   ansible.builtin.shell:
