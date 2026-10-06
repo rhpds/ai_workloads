@@ -56,6 +56,7 @@
 
 - name: Build configmap deploy flags
   ansible.builtin.set_fact:
+    # yamllint disable-line rule:line-length
     _ocp5_workload_ols_configmap_flags: "{{ ('--sandbox-image=' + _ocp5_workload_ols_agentic_effective_sandbox_image) if _ocp5_workload_ols_agentic_effective_sandbox_image else '' }}"
 
 # --------------------------------
