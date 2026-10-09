@@ -3,6 +3,30 @@
   ansible.builtin.set_fact:
     _ocp5_workload_ols_namespace: "{{ ocp5_workload_ols_namespace }}"
 
+# When using a catalog snapshot, pre-create the CatalogSource with grpcPodConfig
+# so the catalog content is extracted by an initContainer before the main registry
+# server starts. This avoids the startup probe timeout (CrashLoopBackOff) caused
+# by the 1.5 GB index taking longer than the probe allows to load into memory.
+- name: Pre-create CatalogSource with content extraction enabled
+  when: ocp5_workload_ols_use_catalog_snapshot | bool
+  kubernetes.core.k8s:
+    state: present
+    definition:
+      apiVersion: operators.coreos.com/v1alpha1
+      kind: CatalogSource
+      metadata:
+        name: "{{ ocp5_workload_ols_catalogsource_name }}"
+        namespace: "{{ ocp5_workload_ols_catalogsource_namespace }}"
+      spec:
+        sourceType: grpc
+        image: "{{ ocp5_workload_ols_catalog_snapshot_image }}:{{ ocp5_workload_ols_catalog_snapshot_image_tag }}"
+        displayName: "{{ ocp5_workload_ols_catalogsource_name }}"
+        publisher: RHPDS
+        grpcPodConfig:
+          extractContent:
+            cacheDir: /tmp/cache
+            catalogDir: /configs
+
 - name: Install OpenShift LightSpeed Operator
   ansible.builtin.include_role:
     name: install_operator
@@ -12,11 +36,14 @@
     install_operator_namespace: "{{ _ocp5_workload_ols_namespace }}"
     install_operator_manage_namespaces: ["{{ _ocp5_workload_ols_namespace }}"]
     install_operator_channel: "{{ ocp5_workload_ols_channel }}"
-    install_operator_catalog: redhat-operators
+    install_operator_catalog: >-
+      {{ ocp5_workload_ols_catalogsource_name
+         if ocp5_workload_ols_use_catalog_snapshot | bool
+         else 'redhat-operators' }}
     install_operator_automatic_install_plan_approval: "{{ ocp5_workload_ols_automatic_install_plan_approval | default(true) }}"
     install_operator_csv_nameprefix: "{{ ocp5_workload_ols_csv_nameprefix }}"
     install_operator_starting_csv: "{{ ocp5_workload_ols_starting_csv }}"
-    install_operator_catalogsource_setup: "{{ ocp5_workload_ols_use_catalog_snapshot | default(false) }}"
+    install_operator_catalogsource_setup: false
     install_operator_catalogsource_name: "{{ ocp5_workload_ols_catalogsource_name | default('') }}"
     install_operator_catalogsource_namespace: "{{ ocp5_workload_ols_catalogsource_namespace | default('') }}"
     install_operator_catalogsource_image: "{{ ocp5_workload_ols_catalog_snapshot_image | default('') }}"
