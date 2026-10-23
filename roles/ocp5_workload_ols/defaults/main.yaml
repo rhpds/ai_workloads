@@ -175,6 +175,7 @@ ocp5_workload_ols_agentic_repo_version: main
 ocp5_workload_ols_agentic_enable_alerts_adapter: true
 ocp5_workload_ols_agentic_enable_console: true
 ocp5_workload_ols_agentic_enable_postgres: false
+ocp5_workload_ols_agentic_enable_cluster_updates: false
 
 # Image overrides — empty string uses the quickstart script defaults (Konflux :main)
 ocp5_workload_ols_agentic_operator_image: ""
@@ -189,4 +190,4 @@ ocp5_workload_ols_agentic_provider: openai
 # MaaS-specific agentic settings (used when ocp5_workload_ols_agentic_provider: maas)
 ocp5_workload_ols_agentic_maas_url: "https://maas-rhdp.apps.maas.redhatworkshops.io/v1"
 ocp5_workload_ols_agentic_maas_model: "claude-sonnet-4-6"
-ocp5_workload_ols_agentic_maas_sandbox_image: "quay.io/dialvare/sandbox-maas:latest"
+ocp5_workload_ols_agentic_maas_sandbox_image: "quay.io/dialvare/sandbox-maas-stream:latest"

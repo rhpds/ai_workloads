@@ -77,7 +77,7 @@
     - r_app_server.resources | length > 0
     - r_app_server.resources[0].status.availableReplicas is defined
     - r_app_server.resources[0].status.availableReplicas >= 1
-  retries: 30
+  retries: 60
   delay: 20
 
 # --------------------------------
@@ -149,6 +149,12 @@
   environment:
     NAMESPACE: "{{ ocp5_workload_ols_namespace }}"
   changed_when: true
+
+- name: Patch deploy-operator.sh to set Analysis approval to Manual
+  ansible.builtin.replace:
+    path: "{{ r_agentic_tmp.path }}/repo/hack/quickstart/deploy-operator.sh"
+    regexp: '(- name: Analysis\s*\n\s*approval:) Automatic'
+    replace: '\1 Manual'
 
 - name: Deploy agentic operator
   ansible.builtin.shell:
@@ -238,7 +244,7 @@
       apiVersion: agentic.openshift.io/v1alpha1
       kind: LLMProvider
       metadata:
-        name: openai
+        name: "{{ ocp5_workload_ols_agentic_provider }}"
         namespace: "{{ ocp5_workload_ols_namespace }}"
       spec:
         type: OpenAI
@@ -261,7 +267,25 @@
         namespace: "{{ ocp5_workload_ols_namespace }}"
       spec:
         llmProvider:
-          name: openai
+          name: "{{ ocp5_workload_ols_agentic_provider }}"
+        model: "{{ _ocp5_workload_ols_agentic_effective_model }}"
+        timeouts:
+          analysisSeconds: 500
+          executionSeconds: 500
+          verificationSeconds: 500
+
+- name: Apply smart Agent CR
+  kubernetes.core.k8s:
+    state: present
+    definition:
+      apiVersion: agentic.openshift.io/v1alpha1
+      kind: Agent
+      metadata:
+        name: smart
+        namespace: "{{ ocp5_workload_ols_namespace }}"
+      spec:
+        llmProvider:
+          name: "{{ ocp5_workload_ols_agentic_provider }}"
         model: "{{ _ocp5_workload_ols_agentic_effective_model }}"
         timeouts:
           analysisSeconds: 500
@@ -276,6 +300,21 @@
   ansible.builtin.file:
     path: "{{ r_agentic_tmp.path }}"
     state: absent
+
+# --------------------------------
+# Fauxinnati — fake update server
+# --------------------------------
+
+- name: Configure fauxinnati update graph
+  when: ocp5_workload_ols_agentic_enable_cluster_updates | bool
+  ansible.builtin.shell:
+    cmd: >
+      oc patch clusterversion version --type json -p
+      '[{"op": "add", "path": "/spec/upstream",
+        "value": "https://fauxinnati-fauxinnati.apps.ota-stage.q2z4.p1.openshiftapps.com/api/upgrades_info/graph"},
+        {"op": "add", "path": "/spec/channel", "value": "simple"}]'
+    executable: /bin/bash
+  changed_when: true
 
 - name: Set user info for Agentic OLS
   agnosticd.core.agnosticd_user_info:
