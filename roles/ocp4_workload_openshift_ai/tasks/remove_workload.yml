@@ -1,5 +1,19 @@
 ---
-- name: Find all KfDef instances
+# Which OpenShift AI CRDs exist depends on the version that was installed:
+# KfDef is 1.x only, and DataScienceCluster is served as v1 up to 2.x but as
+# v2 from 3.x on. kubernetes.core.k8s fails outright on a resource type the
+# cluster does not know, rather than treating it as nothing to delete, so
+# look up what is actually registered instead of hardcoding it.
+
+- name: Look up the KfDef CRD
+  kubernetes.core.k8s_info:
+    api_version: apiextensions.k8s.io/v1
+    kind: CustomResourceDefinition
+    name: kfdefs.kfdef.apps.kubeflow.org
+  register: r_kfdef_crd
+
+- name: Remove KfDef instances left over from OpenShift AI 1.x
+  when: r_kfdef_crd.resources | length > 0
   kubernetes.core.k8s:
     state: absent
     api_version: kfdef.apps.kubeflow.org/v1
@@ -12,10 +26,22 @@
   - { "name": "monitoring", "namespace": "redhat-ods-operator"}
   - { "name": "monitoring", "namespace": "rhods-notebooks"}
 
+- name: Look up the DataScienceCluster CRD
+  kubernetes.core.k8s_info:
+    api_version: apiextensions.k8s.io/v1
+    kind: CustomResourceDefinition
+    name: datascienceclusters.datasciencecluster.opendatahub.io
+  register: r_dsc_crd
+
 - name: Delete OpenShift AI Data Science Cluster
+  when: r_dsc_crd.resources | length > 0
+  vars:
+    _dsc_version: >-
+      {{ r_dsc_crd.resources[0].spec.versions
+         | selectattr('storage') | map(attribute='name') | first }}
   kubernetes.core.k8s:
     state: absent
-    api_version: datasciencecluster.opendatahub.io/v1
+    api_version: "datasciencecluster.opendatahub.io/{{ _dsc_version }}"
     kind: DataScienceCluster
     name: default-dsc
 
