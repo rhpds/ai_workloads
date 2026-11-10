@@ -15,7 +15,7 @@ It consists of the following task files:
 **** One credential secret and OLSConfig for the selected provider
 **** ClusterRoleBindings for lightspeed-operator-query-access
 
-** Tasks: install_ols_operator.yaml - Deploys the OLS operator from OperatorHub or catalog snapshot.
+** Tasks: install_ols_operator.yaml - Installs the OLS operator from the redhat-operators catalog (channel stable). The 2.0 operator bundle deploys both the classic assistant controller and the agentic controller, the CRDs, the OTEL collector, Postgres and the console plugin.
 
 ** Tasks: setup_azure_token.yaml - Creates an Azure AD child app and service principal (when provider is azure_sp).
 *** Creates Azure AD app registration and service principal
@@ -27,9 +27,13 @@ It consists of the following task files:
 *** Only the Azure child app registration (provider azure_sp).
 *** MaaS, Azure token, and OpenAI keys are not created by this role and are not deleted here.
 
-** Tasks: deploy_agentic_ols.yaml - Deploys the agentic OLS component (when ocp5_workload_ols_enable_agentic is true).
+** Tasks: deploy_agentic_ols.yaml - Configures the agentic OLS component (when ocp5_workload_ols_enable_agentic is true).
 *** Independent of the classic OLS provider.
 *** Requires ocp5_workload_ols_agentic_api_key. Catalogs that want the same token as classic OpenAI can alias that variable in AgnosticV.
+*** Creates the reader RBAC (lightspeed-agent service account) and execution RBAC (cluster-admin for the agentic operator service account) that the OLM bundle does not provide.
+*** Creates the LLMProvider, Agent (default and smart) and ApprovalPolicy CRs.
+*** Creates the alerts-adapter-config ConfigMap; the adapter itself is enabled through spec.ols.deployment.alertsAdapter.configMapRef in the OLSConfig.
+*** Optionally points ClusterVersion at the fauxinnati fake update graph (ocp5_workload_ols_agentic_enable_cluster_updates).
 
 == Classic OLS providers
 
@@ -61,10 +65,14 @@ It consists of the following task files:
 
 == Agentic OLS Configuration
 
-* Set ocp5_workload_ols_enable_agentic: true to deploy the agentic component on top of classic OLS.
+* Set ocp5_workload_ols_enable_agentic: true to configure the agentic component on top of classic OLS. The agentic operator itself is always installed by the operator bundle; this flag adds the LLMProvider/Agent/ApprovalPolicy CRs, the agent RBAC and the alerts adapter configuration.
 * Provide ocp5_workload_ols_agentic_api_key. This is independent of classic OLS credentials.
-* The classic OLS operator is scaled to 0 after classic OLS is fully ready, and remains at 0 for the lifetime of the environment.
+* ocp5_workload_ols_agentic_provider selects the LLM backend: maas (OpenAI-compatible MaaS endpoint, model claude-sonnet-4-6 by default) or openai (direct API key).
+* The alerts adapter is enabled through the OLSConfig (spec.ols.deployment.alertsAdapter.configMapRef) and processes alerts routed to the critical receiver, creating AgenticRuns for autonomous investigation.
+* The OLSConfig also sets spec.ols.userDataCollection explicitly (feedback and transcript collection enabled).
+* Analysis and Execution stages require manual approval (ApprovalPolicy CR); Verification and Escalation run automatically.
 * Agentic OLS is not uninstalled on destroy — the cluster itself is deleted.
+* Reference: https://docs.redhat.com/en/documentation/red_hat_openshift_lightspeed/2.0/html-single/configure/[Configuring and deploying OpenShift Lightspeed 2.0].
 
 == The defaults variable file
 

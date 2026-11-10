@@ -17,8 +17,6 @@ ocp5_workload_ols_namespace: openshift-lightspeed
 ocp5_workload_ols_channel: stable
 
 # Set automatic InstallPlan approval
-# Note: This variable is ignored when using a catalog snapshot
-# (install plan approval is always automatic with catalog snapshots)
 ocp5_workload_ols_automatic_install_plan_approval: true
 
 # Set a starting ClusterServiceVersion (leave empty for latest)
@@ -26,21 +24,6 @@ ocp5_workload_ols_starting_csv: ""
 
 # CSV name prefix for the operator
 ocp5_workload_ols_csv_nameprefix: lightspeed-operator
-
-# --------------------------------
-# Operator Catalog Snapshot Settings
-# --------------------------------
-
-# Use a catalog snapshot (default: false)
-ocp5_workload_ols_use_catalog_snapshot: false
-
-# Catalog source name (should be unique in the cluster)
-ocp5_workload_ols_catalogsource_name: openshift-lightspeed-operator-catalog
-ocp5_workload_ols_catalogsource_namespace: openshift-marketplace
-
-# Catalog snapshot image and tag
-ocp5_workload_ols_catalog_snapshot_image: quay.io/openshift-lightspeed/lightspeed-catalog
-ocp5_workload_ols_catalog_snapshot_image_tag: "stable-v0.1.0"
 
 # --------------------------------
 # Classic OLS provider
@@ -154,8 +137,12 @@ ocp5_workload_ols_debug: false
 # --------------------------------
 # Agentic OLS (optional)
 # --------------------------------
-
-# Set to true to deploy the agentic OLS component on top of classic OLS
+# The operator bundle (redhat-operators, channel stable) ships both the
+# classic assistant and the agentic controllers, CRDs, OTEL collector,
+# Postgres and the console plugin. Setting this to true only adds the
+# agentic configuration: LLMProvider/Agent/ApprovalPolicy CRs, reader and
+# execution RBAC, the alerts-adapter-config ConfigMap and the
+# spec.ols.deployment.alertsAdapter reference in the OLSConfig.
 ocp5_workload_ols_enable_agentic: false
 
 # API key for the agentic component. Required when agentic is enabled.
@@ -164,25 +151,8 @@ ocp5_workload_ols_enable_agentic: false
 # ocp5_workload_ols_openai_api_key in AgnosticV.
 ocp5_workload_ols_agentic_api_key: "changeme"
 
-# LLM model used by the agentic component
+# LLM model used by the agentic component (openai provider)
 ocp5_workload_ols_agentic_model: gpt-5.4
-
-# Agentic operator source repository
-ocp5_workload_ols_agentic_repo_url: https://github.com/openshift/lightspeed-agentic-operator
-ocp5_workload_ols_agentic_repo_version: main
-
-# Optional subsystem flags
-ocp5_workload_ols_agentic_enable_alerts_adapter: true
-ocp5_workload_ols_agentic_enable_console: true
-ocp5_workload_ols_agentic_enable_postgres: false
-ocp5_workload_ols_agentic_enable_cluster_updates: false
-
-# Image overrides — empty string uses the quickstart script defaults (Konflux :main)
-ocp5_workload_ols_agentic_operator_image: ""
-ocp5_workload_ols_agentic_sandbox_image: ""
-ocp5_workload_ols_agentic_console_image: ""
-ocp5_workload_ols_agentic_alerts_adapter_image: ""
-ocp5_workload_ols_agentic_otel_image: ""
 
 # Backend for the agentic component: openai (direct API key) or maas
 ocp5_workload_ols_agentic_provider: openai
@@ -190,4 +160,7 @@ ocp5_workload_ols_agentic_provider: openai
 # MaaS-specific agentic settings (used when ocp5_workload_ols_agentic_provider: maas)
 ocp5_workload_ols_agentic_maas_url: "https://maas-rhdp.apps.maas.redhatworkshops.io/v1"
 ocp5_workload_ols_agentic_maas_model: "claude-sonnet-4-6"
-ocp5_workload_ols_agentic_maas_sandbox_image: "quay.io/dialvare/sandbox-maas-stream:latest"
+
+# Point the cluster at the fauxinnati fake update graph so the
+# AI-assisted cluster update demo can "update" the cluster safely
+ocp5_workload_ols_agentic_enable_cluster_updates: false

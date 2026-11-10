@@ -66,6 +66,13 @@
   when: ocp5_workload_ols_install_operator | bool
   ansible.builtin.include_tasks: install_ols_operator.yaml
 
+# Deploy agentic OLS configuration (optional, gated by feature flag).
+# Runs before the classic OLSConfig so the alerts-adapter-config ConfigMap
+# exists before OLSConfig references it via spec.ols.deployment.alertsAdapter.
+- name: Deploy Agentic OLS
+  when: ocp5_workload_ols_enable_agentic | bool
+  ansible.builtin.include_tasks: deploy_agentic_ols.yaml
+
 # Configure OLS
 - name: Configure OLS
   block:
@@ -185,8 +192,3 @@
           kind: User
           name: "{{ item }}"
   loop: "{{ _ocp5_workload_ols_grant_users }}"
-
-# Deploy agentic OLS on top of classic OLS (optional, gated by feature flag)
-- name: Deploy Agentic OLS
-  when: ocp5_workload_ols_enable_agentic | bool
-  ansible.builtin.include_tasks: deploy_agentic_ols.yaml
