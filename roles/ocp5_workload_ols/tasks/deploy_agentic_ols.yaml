@@ -209,9 +209,12 @@
 # --------------------------------
 # Alerts adapter — enabled through the OLSConfig
 # (spec.ols.deployment.alertsAdapter.configMapRef, set in the OLSConfig
-# templates). This ConfigMap is user-managed: it authorizes the adapter to
-# process alerts routed to the critical receiver and points it at the
-# troubleshooting skills used to investigate them.
+# templates). The operator does not create this ConfigMap — it is
+# user-managed: it points the adapter at the troubleshooting skills used
+# to investigate alerts. The allowedReceivers filter ships commented out
+# so lab users can uncomment it and watch AgenticRuns being created
+# automatically when critical alerts fire (the operator watches the
+# ConfigMap and restarts the adapter on change).
 # --------------------------------
 
 - name: Create alerts-adapter-config ConfigMap
@@ -227,7 +230,7 @@
         config.yaml: |
           filtering:
             allowedReceivers:
-            - critical
+            # - critical
           tools:
             skills:
               - image: quay.io/openshiftanalytics/agentic-skills:latest
@@ -260,7 +263,9 @@
         - Provider: {{ ocp5_workload_ols_agentic_provider }}
         - LLM endpoint: {{ ocp5_workload_ols_agentic_maas_url if ocp5_workload_ols_agentic_provider == 'maas' else 'https://api.openai.com' }}
         - Model: {{ _ocp5_workload_ols_agentic_effective_model }}
-        - Alerts adapter: enabled via OLSConfig (critical receiver)
+        - Alerts adapter: deployed via OLSConfig; filtering ships commented
+          (uncomment "- critical" in the alerts-adapter-config ConfigMap to
+          enable autonomous triggering)
       Analysis and Execution stages require manual approval via AgenticRunApproval CR.
     data:
       agentic_ols_namespace: "{{ ocp5_workload_ols_namespace }}"
