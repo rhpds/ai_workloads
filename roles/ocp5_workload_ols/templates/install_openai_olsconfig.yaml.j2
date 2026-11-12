@@ -22,3 +22,12 @@ spec:
     defaultProvider: openai
     logLevel: "{{ ocp5_workload_ols_loglevel }}"
     introspectionEnabled: {{ ocp5_workload_ols_introspection_enabled | bool }}
+    userDataCollection:
+      feedbackDisabled: false
+      transcriptsDisabled: false
+{% if ocp5_workload_ols_enable_agentic | bool %}
+    deployment:
+      alertsAdapter:
+        configMapRef:
+          name: alerts-adapter-config
+{% endif %}

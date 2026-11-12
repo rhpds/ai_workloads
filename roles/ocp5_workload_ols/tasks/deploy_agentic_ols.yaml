@@ -1,10 +1,14 @@
 ---
 # ================================
-# Agentic OLS Deployment
-# Runs quickstart scripts from the agentic operator repo in component order
-# so that individual sub-components can be toggled via feature flags.
-# Classic OLS continues using its Azure credentials; the agentic component
-# uses an independent user-provided OpenAI API key (ocp5_workload_ols_agentic_api_key).
+# Agentic OLS configuration
+# The OLS operator bundle (redhat-operators) already deployed the agentic
+# controller, CRDs, OTEL collector, Postgres, console plugin and the alerts
+# adapter RBAC. This file only adds what the operator does not provide:
+# reader/execution RBAC, LLM credentials, LLMProvider/Agent/ApprovalPolicy
+# CRs and the alerts-adapter-config ConfigMap (referenced from the
+# OLSConfig via spec.ols.deployment.alertsAdapter.configMapRef).
+# Classic OLS continues using its own provider credentials; the agentic
+# component uses an independent API key (ocp5_workload_ols_agentic_api_key).
 # ================================
 
 - name: Assert agentic API key is configured
@@ -17,205 +21,96 @@
       ocp5_workload_ols_agentic_api_key must be set to a real API key (OpenAI key or MaaS token)
       when ocp5_workload_ols_enable_agentic is true.
 
-- name: Create temp directory for agentic operator repo clone
-  ansible.builtin.tempfile:
-    state: directory
-    suffix: _agentic_ols
-  register: r_agentic_tmp
-
-- name: Clone agentic operator repo (shallow)
-  ansible.builtin.git:
-    repo: "{{ ocp5_workload_ols_agentic_repo_url }}"
-    version: "{{ ocp5_workload_ols_agentic_repo_version }}"
-    dest: "{{ r_agentic_tmp.path }}/repo"
-    depth: 1
-    single_branch: true
-
-- name: Extend OTEL rollout timeout for slow nodes
-  ansible.builtin.replace:
-    path: "{{ r_agentic_tmp.path }}/repo/hack/quickstart/deploy-otel.sh"
-    regexp: '--timeout=120s'
-    replace: '--timeout=300s'
-
-# --------------------------------
-# Build optional flag strings
-# Empty string means no flag — quickstart scripts use their default image
-# --------------------------------
-
-- name: Build deploy flags
+- name: Resolve effective agentic settings
   ansible.builtin.set_fact:
-    # yamllint disable rule:line-length
-    _ocp5_workload_ols_agentic_effective_sandbox_image: "{{ ocp5_workload_ols_agentic_maas_sandbox_image if ocp5_workload_ols_agentic_provider == 'maas' else ocp5_workload_ols_agentic_sandbox_image }}"
-    _ocp5_workload_ols_agentic_effective_model: "{{ ocp5_workload_ols_agentic_maas_model if ocp5_workload_ols_agentic_provider == 'maas' else ocp5_workload_ols_agentic_model }}"
-    _ocp5_workload_ols_agentic_effective_creds_secret: "{{ 'llm-creds-maas' if ocp5_workload_ols_agentic_provider == 'maas' else 'llm-creds-openai' }}"
-    _ocp5_workload_ols_otel_flags: "{{ [('--image=' + ocp5_workload_ols_agentic_otel_image) if ocp5_workload_ols_agentic_otel_image else '', '--postgres' if ocp5_workload_ols_agentic_enable_postgres | bool else ''] | select | join(' ') }}"
-    _ocp5_workload_ols_operator_flags: "{{ ('--image=' + ocp5_workload_ols_agentic_operator_image) if ocp5_workload_ols_agentic_operator_image else '' }}"
-    _ocp5_workload_ols_alerts_adapter_flags: "{{ ('--image=' + ocp5_workload_ols_agentic_alerts_adapter_image) if ocp5_workload_ols_agentic_alerts_adapter_image else '' }}"
-    _ocp5_workload_ols_console_flags: "{{ ('--image=' + ocp5_workload_ols_agentic_console_image) if ocp5_workload_ols_agentic_console_image else '' }}"
-    # yamllint enable rule:line-length
+    _ocp5_workload_ols_agentic_effective_model: >-
+      {{ ocp5_workload_ols_agentic_maas_model
+         if ocp5_workload_ols_agentic_provider == 'maas'
+         else ocp5_workload_ols_agentic_model }}
+    _ocp5_workload_ols_agentic_effective_creds_secret: >-
+      {{ 'llm-creds-maas'
+         if ocp5_workload_ols_agentic_provider == 'maas'
+         else 'llm-creds-openai' }}
 
-- name: Build configmap deploy flags
-  ansible.builtin.set_fact:
-    # yamllint disable-line rule:line-length
-    _ocp5_workload_ols_configmap_flags: "{{ ('--sandbox-image=' + _ocp5_workload_ols_agentic_effective_sandbox_image) if _ocp5_workload_ols_agentic_effective_sandbox_image else '' }}"
-
-# --------------------------------
-# Pre-flight: wait for classic OLS to be fully reconciled before freezing
-# the operator. This ensures all operator-managed resources (postgres secrets,
-# app-server) exist before we scale to 0. The app-server becoming available
-# implies postgres and all its secrets are already created.
-# --------------------------------
-
-- name: Wait for classic OLS app-server to be fully available
+- name: Wait for the agentic operator controller to be available
   kubernetes.core.k8s_info:
     api_version: apps/v1
     kind: Deployment
-    name: lightspeed-app-server
+    name: lightspeed-agentic-operator-controller-manager
     namespace: "{{ ocp5_workload_ols_namespace }}"
-  register: r_app_server
+  register: r_agentic_controller
   until:
-    - r_app_server.resources | length > 0
-    - r_app_server.resources[0].status.availableReplicas is defined
-    - r_app_server.resources[0].status.availableReplicas >= 1
+    - r_agentic_controller.resources | length > 0
+    - r_agentic_controller.resources[0].status.availableReplicas is defined
+    - r_agentic_controller.resources[0].status.availableReplicas >= 1
   retries: 60
   delay: 20
 
 # --------------------------------
-# Pre-flight: release ConfigMap ownership from classic OLS operator
-# The classic OLS operator manages lightspeed-agentic-configuration via an
-# ownerReference, which blocks the agentic quickstart scripts from patching it.
+# Reader RBAC for the agent service account.
+# The OLM bundle does not create these bindings (documented v2.0.0 gap):
+# without them every AgenticRun fails with
+# "no ClusterRoleBinding found with subject lightspeed-agent".
 # --------------------------------
 
-- name: Scale down classic OLS operator to release ConfigMap ownership
-  kubernetes.core.k8s:
-    api_version: apps/v1
-    kind: Deployment
-    name: lightspeed-operator-controller-manager
-    namespace: "{{ ocp5_workload_ols_namespace }}"
-    definition:
-      spec:
-        replicas: 0
-    merge_type: merge
-
-- name: Check if lightspeed-agentic-configuration ConfigMap already exists
-  kubernetes.core.k8s_info:
-    api_version: v1
-    kind: ConfigMap
-    name: lightspeed-agentic-configuration
-    namespace: "{{ ocp5_workload_ols_namespace }}"
-  register: r_agentic_configmap
-
-- name: Remove ownerReferences from lightspeed-agentic-configuration ConfigMap
-  when:
-    - r_agentic_configmap.resources | length > 0
-    - r_agentic_configmap.resources[0].metadata.ownerReferences is defined
-  kubernetes.core.k8s_json_patch:
-    api_version: v1
-    kind: ConfigMap
-    name: lightspeed-agentic-configuration
-    namespace: "{{ ocp5_workload_ols_namespace }}"
-    patch:
-      - op: remove
-        path: /metadata/ownerReferences
-
-# --------------------------------
-# Deploy components
-# --------------------------------
-
-- name: Log in to OpenShift cluster for quickstart scripts
-  ansible.builtin.shell:
-    cmd: >
-      oc login {{ openshift_api_url }}
-      --token={{ openshift_api_key }}
-      --insecure-skip-tls-verify=true
-    executable: /bin/bash
-  changed_when: true
-  no_log: true
-
-- name: Deploy OTEL collector
-  ansible.builtin.shell:
-    cmd: "bash deploy-otel.sh {{ _ocp5_workload_ols_otel_flags | default('') | trim }}"
-    chdir: "{{ r_agentic_tmp.path }}/repo/hack/quickstart"
-    executable: /bin/bash
-  environment:
-    NAMESPACE: "{{ ocp5_workload_ols_namespace }}"
-  changed_when: true
-
-- name: Deploy agentic configuration ConfigMap
-  ansible.builtin.shell:
-    cmd: "bash deploy-configmap.sh {{ _ocp5_workload_ols_configmap_flags | default('') | trim }}"
-    chdir: "{{ r_agentic_tmp.path }}/repo/hack/quickstart"
-    executable: /bin/bash
-  environment:
-    NAMESPACE: "{{ ocp5_workload_ols_namespace }}"
-  changed_when: true
-
-- name: Patch deploy-operator.sh to set Analysis approval to Manual
-  ansible.builtin.replace:
-    path: "{{ r_agentic_tmp.path }}/repo/hack/quickstart/deploy-operator.sh"
-    regexp: '(- name: Analysis\s*\n\s*approval:) Automatic'
-    replace: '\1 Manual'
-
-- name: Deploy agentic operator
-  ansible.builtin.shell:
-    cmd: "bash deploy-operator.sh {{ _ocp5_workload_ols_operator_flags | default('') | trim }}"
-    chdir: "{{ r_agentic_tmp.path }}/repo/hack/quickstart"
-    executable: /bin/bash
-  environment:
-    NAMESPACE: "{{ ocp5_workload_ols_namespace }}"
-  changed_when: true
-
-- name: Deploy alerts adapter
-  when: ocp5_workload_ols_agentic_enable_alerts_adapter | bool
-  ansible.builtin.shell:
-    cmd: "bash deploy-alerts-adapter.sh {{ _ocp5_workload_ols_alerts_adapter_flags | default('') | trim }}"
-    chdir: "{{ r_agentic_tmp.path }}/repo/hack/quickstart"
-    executable: /bin/bash
-  environment:
-    NAMESPACE: "{{ ocp5_workload_ols_namespace }}"
-  changed_when: true
-
-- name: Grant alerts adapter ClusterRole for AgenticOLSConfig
-  when: ocp5_workload_ols_agentic_enable_alerts_adapter | bool
-  kubernetes.core.k8s:
-    state: present
-    definition:
-      apiVersion: rbac.authorization.k8s.io/v1
-      kind: ClusterRole
-      metadata:
-        name: lightspeed-agentic-alerts-adapter-agenticolsconfig
-      rules:
-        - apiGroups: ["agentic.openshift.io"]
-          resources: ["agenticolsconfigs"]
-          verbs: ["get"]
-
-- name: Bind alerts adapter ClusterRole for AgenticOLSConfig
-  when: ocp5_workload_ols_agentic_enable_alerts_adapter | bool
+- name: Bind cluster-reader to the agent service account
   kubernetes.core.k8s:
     state: present
     definition:
       apiVersion: rbac.authorization.k8s.io/v1
       kind: ClusterRoleBinding
       metadata:
-        name: lightspeed-agentic-alerts-adapter-agenticolsconfig
+        name: lightspeed-agent-cluster-reader
       roleRef:
         apiGroup: rbac.authorization.k8s.io
         kind: ClusterRole
-        name: lightspeed-agentic-alerts-adapter-agenticolsconfig
+        name: cluster-reader
       subjects:
         - kind: ServiceAccount
-          name: lightspeed-agentic-alerts-adapter
+          name: lightspeed-agent
           namespace: "{{ ocp5_workload_ols_namespace }}"
 
-- name: Deploy console plugin
-  when: ocp5_workload_ols_agentic_enable_console | bool
-  ansible.builtin.shell:
-    cmd: "bash deploy-console.sh {{ _ocp5_workload_ols_console_flags | default('') | trim }}"
-    chdir: "{{ r_agentic_tmp.path }}/repo/hack/quickstart"
-    executable: /bin/bash
-  environment:
-    NAMESPACE: "{{ ocp5_workload_ols_namespace }}"
-  changed_when: true
+- name: Bind cluster-monitoring-view to the agent service account
+  kubernetes.core.k8s:
+    state: present
+    definition:
+      apiVersion: rbac.authorization.k8s.io/v1
+      kind: ClusterRoleBinding
+      metadata:
+        name: lightspeed-agent-monitoring-view
+      roleRef:
+        apiGroup: rbac.authorization.k8s.io
+        kind: ClusterRole
+        name: cluster-monitoring-view
+      subjects:
+        - kind: ServiceAccount
+          name: lightspeed-agent
+          namespace: "{{ ocp5_workload_ols_namespace }}"
+
+# --------------------------------
+# Execution RBAC for the agentic operator.
+# The analysis LLM proposes per-run sandbox RBAC dynamically, so a scoped
+# ClusterRole fails whenever a run needs permissions outside the set. For
+# Technology Preview the docs state cluster-admin is the only reliable
+# option (same as the former quickstart deployment).
+# --------------------------------
+
+- name: Bind cluster-admin to the agentic operator service account
+  kubernetes.core.k8s:
+    state: present
+    definition:
+      apiVersion: rbac.authorization.k8s.io/v1
+      kind: ClusterRoleBinding
+      metadata:
+        name: lightspeed-agentic-operator-cluster-admin
+      roleRef:
+        apiGroup: rbac.authorization.k8s.io
+        kind: ClusterRole
+        name: cluster-admin
+      subjects:
+        - kind: ServiceAccount
+          name: lightspeed-agentic-operator-controller-manager
+          namespace: "{{ ocp5_workload_ols_namespace }}"
 
 # --------------------------------
 # LLM credentials — provider API key for the agentic component.
@@ -237,6 +132,8 @@
         OPENAI_API_KEY: "{{ ocp5_workload_ols_agentic_api_key }}"
   no_log: true
 
+# MaaS is an OpenAI-compatible proxy: the documented LLMProvider url
+# override points the OpenAI provider type at the MaaS endpoint.
 - name: Apply LLMProvider CR
   kubernetes.core.k8s:
     state: present
@@ -245,7 +142,6 @@
       kind: LLMProvider
       metadata:
         name: "{{ ocp5_workload_ols_agentic_provider }}"
-        namespace: "{{ ocp5_workload_ols_namespace }}"
       spec:
         type: OpenAI
         openAI: >-
@@ -264,7 +160,6 @@
       kind: Agent
       metadata:
         name: default
-        namespace: "{{ ocp5_workload_ols_namespace }}"
       spec:
         llmProvider:
           name: "{{ ocp5_workload_ols_agentic_provider }}"
@@ -282,7 +177,6 @@
       kind: Agent
       metadata:
         name: smart
-        namespace: "{{ ocp5_workload_ols_namespace }}"
       spec:
         llmProvider:
           name: "{{ ocp5_workload_ols_agentic_provider }}"
@@ -292,14 +186,56 @@
           executionSeconds: 500
           verificationSeconds: 500
 
+- name: Apply ApprovalPolicy CR
+  kubernetes.core.k8s:
+    state: present
+    definition:
+      apiVersion: agentic.openshift.io/v1alpha1
+      kind: ApprovalPolicy
+      metadata:
+        name: cluster
+      spec:
+        maxConcurrentRuns: 5
+        stages:
+          - name: Analysis
+            approval: Manual
+          - name: Execution
+            approval: Manual
+          - name: Verification
+            approval: Automatic
+          - name: Escalation
+            approval: Automatic
+
 # --------------------------------
-# Cleanup and user info
+# Alerts adapter — enabled through the OLSConfig
+# (spec.ols.deployment.alertsAdapter.configMapRef, set in the OLSConfig
+# templates). The operator does not create this ConfigMap — it is
+# user-managed: it points the adapter at the troubleshooting skills used
+# to investigate alerts. The allowedReceivers filter ships commented out
+# so lab users can uncomment it and watch AgenticRuns being created
+# automatically when critical alerts fire (the operator watches the
+# ConfigMap and restarts the adapter on change).
 # --------------------------------
 
-- name: Remove temp repo clone
-  ansible.builtin.file:
-    path: "{{ r_agentic_tmp.path }}"
-    state: absent
+- name: Create alerts-adapter-config ConfigMap
+  kubernetes.core.k8s:
+    state: present
+    definition:
+      apiVersion: v1
+      kind: ConfigMap
+      metadata:
+        name: alerts-adapter-config
+        namespace: "{{ ocp5_workload_ols_namespace }}"
+      data:
+        config.yaml: |
+          filtering:
+            allowedReceivers:
+            # - critical
+          tools:
+            skills:
+              - image: quay.io/openshiftanalytics/agentic-skills:latest
+                paths:
+                  - /skills/cluster-troubleshoot/investigate-alert
 
 # --------------------------------
 # Fauxinnati — fake update server
@@ -307,14 +243,17 @@
 
 - name: Configure fauxinnati update graph
   when: ocp5_workload_ols_agentic_enable_cluster_updates | bool
-  ansible.builtin.shell:
-    cmd: >
-      oc patch clusterversion version --type json -p
-      '[{"op": "add", "path": "/spec/upstream",
-        "value": "https://fauxinnati-fauxinnati.apps.ota-stage.q2z4.p1.openshiftapps.com/api/upgrades_info/graph"},
-        {"op": "add", "path": "/spec/channel", "value": "simple"}]'
-    executable: /bin/bash
-  changed_when: true
+  kubernetes.core.k8s_json_patch:
+    api_version: config.openshift.io/v1
+    kind: ClusterVersion
+    name: version
+    patch:
+      - op: add
+        path: /spec/upstream
+        value: https://fauxinnati-fauxinnati.apps.ota-stage.q2z4.p1.openshiftapps.com/api/upgrades_info/graph
+      - op: add
+        path: /spec/channel
+        value: simple
 
 - name: Set user info for Agentic OLS
   agnosticd.core.agnosticd_user_info:
@@ -324,9 +263,10 @@
         - Provider: {{ ocp5_workload_ols_agentic_provider }}
         - LLM endpoint: {{ ocp5_workload_ols_agentic_maas_url if ocp5_workload_ols_agentic_provider == 'maas' else 'https://api.openai.com' }}
         - Model: {{ _ocp5_workload_ols_agentic_effective_model }}
-        - Alerts Adapter: {{ ocp5_workload_ols_agentic_enable_alerts_adapter }}
-        - Console Plugin: {{ ocp5_workload_ols_agentic_enable_console }}
-      Execution stage requires manual approval via AgenticRunApproval CR.
+        - Alerts adapter: deployed via OLSConfig; filtering ships commented
+          (uncomment "- critical" in the alerts-adapter-config ConfigMap to
+          enable autonomous triggering)
+      Analysis and Execution stages require manual approval via AgenticRunApproval CR.
     data:
       agentic_ols_namespace: "{{ ocp5_workload_ols_namespace }}"
-      agentic_model: "{{ ocp5_workload_ols_agentic_model }}"
+      agentic_model: "{{ _ocp5_workload_ols_agentic_effective_model }}"
