@@ -5,7 +5,7 @@
 
 # Remove Azure App Registration and Service Principal (if token auth was used)
 - name: Remove Azure App and Service Principal
-  when: ocp4_workload_ols_get_token | bool
+  when: ocp4_workload_ols_get_token | bool and ocp4_workload_ai_platform != 'maas'
   block:
     - name: Get Token for Master App
       ansible.builtin.uri:

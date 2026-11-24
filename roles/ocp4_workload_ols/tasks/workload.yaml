@@ -1,6 +1,6 @@
 # Validate required variables are set
 - name: Validate Azure token authentication variables
-  when: ocp4_workload_ols_get_token | bool
+  when: ocp4_workload_ols_get_token | bool and ocp4_workload_ai_platform != 'maas'
   ansible.builtin.assert:
     that:
       - ocp4_workload_ols_azure_tenant_id is defined
@@ -16,7 +16,7 @@
     fail_msg: "Azure token authentication is enabled but required variables are not properly configured. Please check defaults/main.yaml"
 
 - name: Validate API key authentication variables
-  when: not ocp4_workload_ols_get_token | bool
+  when: not ocp4_workload_ols_get_token | bool and ocp4_workload_ai_platform != 'maas'
   ansible.builtin.assert:
     that:
       - ocp4_workload_ols_api_token is defined
@@ -24,12 +24,24 @@
       - ocp4_workload_ols_api_token | length > 0
     fail_msg: "API key authentication is enabled but ocp4_workload_ols_api_token is not properly configured. Please check defaults/main.yaml"
 
+- name: Validate MaaS variables
+  when: ocp4_workload_ai_platform == 'maas'
+  ansible.builtin.assert:
+    that:
+      - ocp4_workload_ols_maas_api_token is defined
+      - ocp4_workload_ols_maas_api_token != "changeme"
+      - ocp4_workload_ols_maas_url is defined
+      - ocp4_workload_ols_maas_url != "changeme"
+      - ocp4_workload_ols_maas_model is defined
+      - ocp4_workload_ols_maas_model != "changeme"
+    fail_msg: "MaaS provider is enabled but required variables are not properly configured. Please check defaults/main.yaml"
+
 - name: Validate AI platform is supported
   when: ocp4_workload_ai_platform is defined
   ansible.builtin.assert:
     that:
-      - ocp4_workload_ai_platform in ['azure', 'openai', 'watson', 'openshiftai']
-    fail_msg: "ocp4_workload_ai_platform must be one of: azure, openai, watson, openshiftai"
+      - ocp4_workload_ai_platform in ['azure', 'openai', 'watson', 'openshiftai', 'maas']
+    fail_msg: "ocp4_workload_ai_platform must be one of: azure, openai, watson, openshiftai, maas"
 
 # Ensure that the openshift-lightspeed namespace is always created
 - name: Ensure openshift-lightspeed namespace exists
@@ -49,7 +61,7 @@
   block:
     # Setup Azure AI Cognitive Services (Token-based authentication)
     - name: Setup Azure AI Cognitive Services
-      when: ocp4_workload_ols_get_token | bool
+      when: ocp4_workload_ols_get_token | bool and ocp4_workload_ai_platform != 'maas'
       ansible.builtin.include_tasks: setup_azure_token.yaml
 
     # Create authentication secrets based on auth type
@@ -60,11 +72,16 @@
         wait_timeout: 300
       vars:
         _secret_template: >-
-          {{ 'create_secret_token.yaml.j2' if ocp4_workload_ols_get_token
-             else 'create_secret.yaml.j2' }}
+          {%- if ocp4_workload_ai_platform == 'maas' -%}
+          create_maas_secret.yaml.j2
+          {%- elif ocp4_workload_ols_get_token -%}
+          create_secret_token.yaml.j2
+          {%- else -%}
+          create_secret.yaml.j2
+          {%- endif -%}
 
     - name: Create Azure App Service Principal Secret
-      when: ocp4_workload_ols_get_token | bool
+      when: ocp4_workload_ols_get_token | bool and ocp4_workload_ai_platform != 'maas'
       kubernetes.core.k8s:
         template: create_azure_api_token.yaml.j2
         wait: true
@@ -79,8 +96,13 @@
         wait_timeout: 300
       vars:
         _olsconfig_template: >-
-          {{ 'install_azure_app_sp_olsconfig.yaml.j2' if ocp4_workload_ols_get_token
-             else 'install_' + ocp4_workload_ai_platform + '_olsconfig.yaml.j2' }}
+          {%- if ocp4_workload_ai_platform == 'maas' -%}
+          install_maas_olsconfig.yaml.j2
+          {%- elif ocp4_workload_ols_get_token -%}
+          install_azure_app_sp_olsconfig.yaml.j2
+          {%- else -%}
+          install_{{ ocp4_workload_ai_platform }}_olsconfig.yaml.j2
+          {%- endif -%}
 
 # Build the list of non-admin users to grant lightspeed-operator-query-access.
 # Strategy depends on the auth provider:

@@ -46,10 +46,21 @@ ocp4_workload_ols_catalog_snapshot_image_tag: "stable-v0.1.0"
 # OLS Configuration
 # --------------------------------
 
-# AI Platform to use: azure, openai, watson, openshiftai
+# AI Platform to use: azure, openai, watson, openshiftai, maas
 ocp4_workload_ai_platform: azure
 
 ocp4_workload_ols_introspection_enabled: true
+
+# --------------------------------
+# MaaS (ocp4_workload_ai_platform: maas)
+# --------------------------------
+# Catalogs that mint a MaaS key should set this. Destroy of that key is
+# catalog-owned; this role does not clean it up. Catalogs using this
+# provider should also set ocp4_workload_ols_get_token: false.
+ocp4_workload_ols_maas_api_token: "changeme"
+ocp4_workload_ols_maas_url: "https://maas-rhdp.apps.maas.redhatworkshops.io/v1"
+ocp4_workload_ols_maas_model: claude-sonnet-4-6
+ocp4_workload_ols_maas_deployment_name: claude-sonnet-4-6
 
 # --------------------------------
 # Authentication Configuration
